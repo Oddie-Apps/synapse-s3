@@ -54,6 +54,7 @@ jobs:
             SYNAPSE_VERSION=${{ steps.version.outputs.version }}
           tags: |
             ghcr.io/oddie-apps/synapse-s3:${{ steps.version.outputs.version }}
+            ghcr.io/oddie-apps/synapse-s3:${{ steps.version.outputs.version }}-${{ github.sha }}
             ghcr.io/oddie-apps/synapse-s3:latest
           labels: |
             org.opencontainers.image.source=https://github.com/oddie-apps/synapse-s3
