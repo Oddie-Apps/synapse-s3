@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "Dockerfile"
+      - "s3_storage_provider.py"
       - ".github/workflows/build.yaml"
   workflow_dispatch:
     inputs:

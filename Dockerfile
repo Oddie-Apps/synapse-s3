@@ -31,4 +31,15 @@ RUN PROFILE_PY=$(/usr/local/bin/python3 -c "import synapse.handlers.profile, os;
     && ! grep -q 'Expected at most one task to cancel' "$PROFILE_PY" \
     && echo "PATCH APPLIED to $PROFILE_PY"
 
+# Overlay our local fork of s3_storage_provider.py with cache-on-read.
+# Without this, every R2 fetch costs a full round-trip even with a PVC
+# at /data, because upstream's fetch() never writes back to local cache.
+# Marked changes inside the file with "OA-CACHE".
+COPY s3_storage_provider.py /tmp/s3_storage_provider.py
+RUN TARGET=$(/usr/local/bin/python3 -c "import s3_storage_provider, os; print(s3_storage_provider.__file__)") \
+    && cp /tmp/s3_storage_provider.py "$TARGET" \
+    && rm /tmp/s3_storage_provider.py \
+    && grep -q 'OA-CACHE' "$TARGET" \
+    && echo "S3 PROVIDER PATCH APPLIED to $TARGET"
+
 USER 991
