@@ -1,0 +1,67 @@
+name: Build and Push Synapse + S3 Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "s3_storage_provider.py"
+      - ".forgejo/workflows/build.yaml"
+  workflow_dispatch:
+    inputs:
+      synapse_version:
+        description: "Upstream Synapse version (e.g., v1.151.0)"
+        required: true
+        default: "v1.151.0"
+  schedule:
+    - cron: "0 6 * * 1"
+
+env:
+  IMAGE_NAME: oddie-apps/synapse-s3
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    container:
+      image: forge.oddie.app/julian/ci-elixir:1.19.5-otp-28
+      credentials:
+        username: julian
+        password: ${{ secrets.FORGE_PUSH_TOKEN }}
+    env:
+      BUILDKIT_HOST: tcp://10.0.1.57:1234
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: Determine Synapse version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.synapse_version }}" ]; then
+            V="${{ github.event.inputs.synapse_version }}"
+          else
+            V=$(curl -sL "https://api.github.com/repos/element-hq/synapse/releases/latest" | jq -r .tag_name)
+          fi
+          echo "version=${V}" >> "$GITHUB_OUTPUT"
+          echo "Building synapse-s3 against Synapse ${V}"
+      - name: Login to Forgejo registry
+        run: |
+          mkdir -p ~/.docker
+          F_AUTH=$(printf "%s:%s" "julian" "${{ secrets.FORGE_PUSH_TOKEN }}" | base64 -w0)
+          echo "{\"auths\":{\"forge.oddie.app\":{\"auth\":\"$F_AUTH\"}}}" > ~/.docker/config.json
+      - name: Login to GHCR (dual-push mirror)
+        run: |
+          G_AUTH=$(printf "%s:%s" "jlxq0" "${{ secrets.GHCR_TOKEN }}" | base64 -w0)
+          jq --arg a "$G_AUTH" '.auths["ghcr.io"] = {auth: $a}' ~/.docker/config.json > /tmp/d && mv /tmp/d ~/.docker/config.json
+      - name: Build and push (dual-registry)
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          buildctl build \
+            --frontend dockerfile.v0 \
+            --local context=. \
+            --local dockerfile=. \
+            --opt build-arg:SYNAPSE_VERSION=${V} \
+            --output "type=image,\"name=forge.oddie.app/${IMAGE_NAME}:${V},forge.oddie.app/${IMAGE_NAME}:${V}-${SHORT_SHA},forge.oddie.app/${IMAGE_NAME}:latest\",push=true" \
+            --output "type=image,\"name=ghcr.io/${IMAGE_NAME}:${V},ghcr.io/${IMAGE_NAME}:${V}-${SHORT_SHA},ghcr.io/${IMAGE_NAME}:latest\",push=true"
