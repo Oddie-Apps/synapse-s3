@@ -50,10 +50,6 @@ jobs:
           mkdir -p ~/.docker
           F_AUTH=$(printf "%s:%s" "julian" "${{ secrets.FORGE_PUSH_TOKEN }}" | base64 -w0)
           echo "{\"auths\":{\"forge.oddie.app\":{\"auth\":\"$F_AUTH\"}}}" > ~/.docker/config.json
-      - name: Login to GHCR (dual-push mirror)
-        run: |
-          G_AUTH=$(printf "%s:%s" "jlxq0" "${{ secrets.GHCR_TOKEN }}" | base64 -w0)
-          jq --arg a "$G_AUTH" '.auths["ghcr.io"] = {auth: $a}' ~/.docker/config.json > /tmp/d && mv /tmp/d ~/.docker/config.json
       - name: Build and push (dual-registry)
         run: |
           V="${{ steps.version.outputs.version }}"
@@ -63,5 +59,4 @@ jobs:
             --local context=. \
             --local dockerfile=. \
             --opt build-arg:SYNAPSE_VERSION=${V} \
-            --output "type=image,\"name=forge.oddie.app/${IMAGE_NAME}:${V},forge.oddie.app/${IMAGE_NAME}:${V}-${SHORT_SHA},forge.oddie.app/${IMAGE_NAME}:latest\",push=true" \
-            --output "type=image,\"name=ghcr.io/${IMAGE_NAME}:${V},ghcr.io/${IMAGE_NAME}:${V}-${SHORT_SHA},ghcr.io/${IMAGE_NAME}:latest\",push=true"
+            --output "type=image,\"name=forge.oddie.app/${IMAGE_NAME}:${V},forge.oddie.app/${IMAGE_NAME}:${V}-${SHORT_SHA},forge.oddie.app/${IMAGE_NAME}:latest\",push=true"
