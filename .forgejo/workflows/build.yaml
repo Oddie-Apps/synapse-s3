@@ -17,17 +17,17 @@ on:
 
 env:
   IMAGE_NAME: oddie-apps/synapse-s3
+  # Custom CI base image with buildctl + tools pre-installed (fondue forge).
+  CI_IMAGE: forge.oddie.app/jlxq0/ci-elixir:1.19.5-otp-28
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     container:
-      image: forge.oddie.app/julian/ci-elixir:1.19.5-otp-28
+      image: forge.oddie.app/jlxq0/ci-elixir:1.19.5-otp-28
       credentials:
-        username: julian
+        username: jlxq0
         password: ${{ secrets.FORGE_PUSH_TOKEN }}
-    env:
-      BUILDKIT_HOST: tcp://10.0.1.57:1234
     defaults:
       run:
         shell: bash
@@ -47,15 +47,28 @@ jobs:
       - name: Login to Forgejo registry
         run: |
           mkdir -p ~/.docker
-          F_AUTH=$(printf "%s:%s" "julian" "${{ secrets.FORGE_PUSH_TOKEN }}" | base64 -w0)
+          F_AUTH=$(printf "%s:%s" "jlxq0" "${{ secrets.FORGE_PUSH_TOKEN }}" | base64 -w0)
           echo "{\"auths\":{\"forge.oddie.app\":{\"auth\":\"$F_AUTH\"}}}" > ~/.docker/config.json
-      - name: Build and push (dual-registry)
+      - name: Build and push
         run: |
+          # buildkitd runs on the runner host; from inside this job container it
+          # is reachable at our own bridge gateway. Never hardcode it (it changes
+          # on reboot/DHCP and differs per repo/run).
+          GW="$(ip -4 route 2>/dev/null | awk '/^default/{print $3; exit}')"
+          if [ -z "$GW" ]; then
+            h=$(awk '$2=="00000000"{print $3; exit}' /proc/net/route)
+            GW=$(printf '%d.%d.%d.%d' "0x${h:6:2}" "0x${h:4:2}" "0x${h:2:2}" "0x${h:0:2}")
+          fi
+          export BUILDKIT_HOST="tcp://${GW}:1234"
+          echo "buildkitd at ${BUILDKIT_HOST}"
           V="${{ steps.version.outputs.version }}"
           SHORT_SHA="${GITHUB_SHA::7}"
+          CACHE_REF="forge.oddie.app/${IMAGE_NAME}:cache"
           buildctl build \
             --frontend dockerfile.v0 \
             --local context=. \
             --local dockerfile=. \
             --opt build-arg:SYNAPSE_VERSION=${V} \
+            --import-cache "type=registry,ref=${CACHE_REF}" \
+            --export-cache "type=registry,ref=${CACHE_REF},mode=max,ignore-error=true" \
             --output "type=image,\"name=forge.oddie.app/${IMAGE_NAME}:${V},forge.oddie.app/${IMAGE_NAME}:${V}-${SHORT_SHA},forge.oddie.app/${IMAGE_NAME}:latest\",push=true"
