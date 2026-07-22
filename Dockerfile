@@ -1,45 +1,39 @@
 # Synapse + synapse-s3-storage-provider
 #
-# Vanilla matrixdotorg/synapse with the s3 storage provider Python module
-# pre-installed, so Synapse's media_storage_providers config can directly
-# reference it without per-pod pip install at startup.
+# Official element-hq/synapse with the STOCK synapse-s3-storage-provider Python
+# module pre-installed, so Synapse's media_storage_providers config can reference
+# it directly without a per-pod pip install at startup.
 #
-# Tag follows upstream Synapse: ghcr.io/oddie-apps/synapse-s3:vX.Y.Z
+# No forks. The only non-stock line is a one-liner sed that removes an overstrict
+# assertion upstream ships in profile.py (element-hq/synapse#19702, still OPEN as
+# of v1.157.0) — see below. Delete that RUN block the moment #19702 lands upstream.
+#
+# Tag follows upstream Synapse: forge.oddie.app/oddie-apps/synapse-s3:vX.Y.Z
 #
 # CI builds this on:
-#  - Manual workflow_dispatch (with version input)
+#  - Manual workflow_dispatch (with synapse_version input)
 #  - Push to main affecting Dockerfile / workflow
-#  - Weekly schedule polling matrixdotorg/synapse for new releases
+#  - Weekly schedule polling element-hq/synapse for new releases
 
-ARG SYNAPSE_VERSION=v1.151.0
-FROM matrixdotorg/synapse:${SYNAPSE_VERSION}
+ARG SYNAPSE_VERSION=v1.157.0
+FROM ghcr.io/element-hq/synapse:${SYNAPSE_VERSION}
 
-# Install s3 storage provider
-# - --no-cache-dir keeps the layer small
-# - Pinning the version is a follow-up; for now track the latest published
+# Install the stock s3 storage provider (unmodified upstream package).
 USER root
 RUN /usr/local/bin/python3 -m pip install --no-cache-dir synapse-s3-storage-provider \
+    && /usr/local/bin/python3 -c 'import s3_storage_provider' \
     && rm -rf /root/.cache /tmp/*
 
-# Patch element-hq/synapse#19702 — overstrict assertion in profile.py crashes
-# avatar updates from appservices when stale tasks linger in the scheduler.
-# The code on the next line already iterates all tasks and cancels them, so
-# the assertion is paranoia. Removing it.
+# WORKAROUND for element-hq/synapse#19702 (OPEN): an overstrict assertion in
+# profile.py crashes avatar/profile updates for appservice (bridge) virtual users
+# that lack an existing profile row. The line above the assert already iterates and
+# cancels every task, so the assert is pure paranoia. This is a single sed on stock
+# code, not a fork — REMOVE this block once #19702 is fixed upstream (the grep guard
+# below fails the build when the assert is gone, forcing us to drop it).
 RUN PROFILE_PY=$(/usr/local/bin/python3 -c "import synapse.handlers.profile, os; print(os.path.dirname(synapse.handlers.profile.__file__) + '/profile.py')") \
     && grep -q 'Expected at most one task to cancel' "$PROFILE_PY" \
     && sed -i '/assert len(tasks_to_cancel) <= 1, "Expected at most one task to cancel"/d' "$PROFILE_PY" \
     && ! grep -q 'Expected at most one task to cancel' "$PROFILE_PY" \
-    && echo "PATCH APPLIED to $PROFILE_PY"
-
-# Overlay our local fork of s3_storage_provider.py with cache-on-read.
-# Without this, every R2 fetch costs a full round-trip even with a PVC
-# at /data, because upstream's fetch() never writes back to local cache.
-# Marked changes inside the file with "OA-CACHE".
-COPY s3_storage_provider.py /tmp/s3_storage_provider.py
-RUN TARGET=$(/usr/local/bin/python3 -c "import s3_storage_provider, os; print(s3_storage_provider.__file__)") \
-    && cp /tmp/s3_storage_provider.py "$TARGET" \
-    && rm /tmp/s3_storage_provider.py \
-    && grep -q 'OA-CACHE' "$TARGET" \
-    && echo "S3 PROVIDER PATCH APPLIED to $TARGET"
+    && echo "PATCH APPLIED (element-hq/synapse#19702) to $PROFILE_PY"
 
 USER 991

@@ -5,14 +5,13 @@ on:
     branches: [main]
     paths:
       - "Dockerfile"
-      - "s3_storage_provider.py"
       - ".forgejo/workflows/build.yaml"
   workflow_dispatch:
     inputs:
       synapse_version:
-        description: "Upstream Synapse version (e.g., v1.151.0)"
+        description: "Upstream Synapse version (e.g., v1.157.0)"
         required: true
-        default: "v1.151.0"
+        default: "v1.157.0"
   schedule:
     - cron: "0 6 * * 1"
 
