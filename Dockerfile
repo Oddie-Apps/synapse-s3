@@ -5,17 +5,18 @@
 # it directly without a per-pod pip install at startup.
 #
 # No forks. The only non-stock line is a one-liner sed that removes an overstrict
-# assertion upstream ships in profile.py (element-hq/synapse#19702, still OPEN as
-# of v1.157.0) — see below. Delete that RUN block the moment #19702 lands upstream.
+# assertion upstream ships in profile.py (element-hq/synapse#19702, still present
+# in v1.164.1) — see below. Delete that RUN block the moment #19702 lands upstream.
 #
 # Tag follows upstream Synapse: forge.oddie.app/oddie-apps/synapse-s3:vX.Y.Z
 #
 # CI builds this on:
 #  - Manual workflow_dispatch (with synapse_version input)
-#  - Push to main affecting Dockerfile / workflow
+#  - Push to main affecting Dockerfile / workflow: builds exactly the
+#    SYNAPSE_VERSION pinned below, so merging a bump is the release step
 #  - Weekly schedule polling element-hq/synapse for new releases
 
-ARG SYNAPSE_VERSION=v1.157.0
+ARG SYNAPSE_VERSION=v1.164.1
 FROM ghcr.io/element-hq/synapse:${SYNAPSE_VERSION}
 
 # Install the stock s3 storage provider (unmodified upstream package).
