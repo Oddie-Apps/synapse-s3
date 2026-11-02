@@ -14,7 +14,7 @@ forge.oddie.app/oddie-apps/synapse-s3:latest   # follows latest upstream stable
 ## Build cadence
 
 CI rebuilds on:
-- Push to `main` (Dockerfile / workflow changes)
+- Push to `main` (Dockerfile / workflow changes) — builds exactly the `ARG SYNAPSE_VERSION` pinned in the Dockerfile
 - Manual workflow_dispatch with `synapse_version` input
 - Weekly schedule (Mondays 06:00 UTC) — polls `element-hq/synapse` for new releases
 
@@ -24,7 +24,7 @@ Official `ghcr.io/element-hq/synapse` doesn't bundle the s3 storage provider. Th
 
 ## The one non-stock line
 
-The Dockerfile carries a single `sed` that removes an overstrict assertion in `synapse/handlers/profile.py` (upstream bug **element-hq/synapse#19702**, still OPEN as of v1.157.0). Without it, avatar/profile updates for appservice (bridge) virtual users that lack an existing profile row crash. It is **not a fork** — one line on stock code, with a `grep` guard that fails the build once upstream removes the assert, forcing us to drop the workaround. No other patches; the s3 provider is used unmodified.
+The Dockerfile carries a single `sed` that removes an overstrict assertion in `synapse/handlers/profile.py` (upstream bug **element-hq/synapse#19702**, assert still present in v1.164.1). Without it, avatar/profile updates for appservice (bridge) virtual users that lack an existing profile row crash. It is **not a fork** — one line on stock code, with a `grep` guard that fails the build once upstream removes the assert, forcing us to drop the workaround. No other patches; the s3 provider is used unmodified.
 
 ## Bumping
 

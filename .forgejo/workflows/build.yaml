@@ -11,7 +11,7 @@ on:
       synapse_version:
         description: "Upstream Synapse version (e.g., v1.157.0)"
         required: true
-        default: "v1.157.0"
+        default: "v1.164.1"
   schedule:
     - cron: "0 6 * * 1"
 
@@ -39,8 +39,18 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.synapse_version }}" ]; then
             V="${{ github.event.inputs.synapse_version }}"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            # A merge to main builds the version the Dockerfile pins, not
+            # whatever upstream calls latest at that moment.
+            V=$(sed -n 's/^ARG SYNAPSE_VERSION=//p' Dockerfile | head -1)
           else
             V=$(curl -sL "https://api.github.com/repos/element-hq/synapse/releases/latest" | jq -r .tag_name)
+          fi
+          # Refuse anything that is not a stable vX.Y.Z (an rc, or "null" from a
+          # rate-limited GitHub API answer).
+          if ! printf '%s' "$V" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "refusing to build: synapse version '${V}' is not vX.Y.Z" >&2
+            exit 1
           fi
           echo "version=${V}" >> "$GITHUB_OUTPUT"
           echo "Building synapse-s3 against Synapse ${V}"
